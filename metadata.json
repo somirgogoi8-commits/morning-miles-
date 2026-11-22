@@ -1,0 +1,6 @@
+{
+  "name": "Morning Miles Club – Official Manhunt",
+  "description": "Official platform for Morning Miles Club (Golaghat, Assam) to organise real-world Manhunt hide-and-seek events with registrations, verified INR payments, digital QR tickets, and private host check-in.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

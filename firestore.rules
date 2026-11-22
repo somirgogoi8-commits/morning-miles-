@@ -1,0 +1,424 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Health check document for startup connectivity verification
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Core Security Primitives
+    // -------------------------------------------------------------------------
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 2 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailKey(emailKey) {
+      return emailKey is string && emailKey.size() >= 5 && emailKey.size() <= 160;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.size() >= 5
+        && request.auth.token.email.size() <= 160;
+    }
+
+    function isBootstrapPrimaryAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'somirgogoi8@gmail.com';
+    }
+
+    function hasAdminDoc() {
+      return isVerifiedUser()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data;
+    }
+
+    function isPrimaryAdmin() {
+      return isBootstrapPrimaryAdmin()
+        || (hasAdminDoc() && adminDoc().active == true && adminDoc().role == 'PRIMARY_ADMIN');
+    }
+
+    function isEventHost() {
+      return hasAdminDoc()
+        && adminDoc().active == true
+        && adminDoc().role == 'EVENT_HOST';
+    }
+
+    function isAdmin() {
+      return isPrimaryAdmin() || isEventHost();
+    }
+
+    function canAccessEvent(eventId) {
+      return isPrimaryAdmin()
+        || (isEventHost() && adminDoc().assignedEventIds is list && eventId in adminDoc().assignedEventIds);
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints
+    // -------------------------------------------------------------------------
+
+    function isValidEvent(data) {
+      return data.keys().hasAll([
+          'id', 'title', 'dateISO', 'reportingTime', 'startingTime',
+          'meetingPoint', 'boundaries', 'entryFeeInr', 'capacity',
+          'confirmedCount', 'registrationOpen', 'isPublished', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'title', 'subtitle', 'dateISO', 'reportingTime', 'startingTime',
+          'meetingPoint', 'boundaries', 'entryFeeInr', 'prizeDetails', 'capacity',
+          'confirmedCount', 'registrationOpen', 'registrationOpensAt', 'registrationClosesAt',
+          'isPublished', 'safetyNotes', 'scramNotes', 'bannerUrl', 'createdBy',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 140
+        && (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 240))
+        && data.dateISO is string && data.dateISO.size() >= 10 && data.dateISO.size() <= 40
+        && data.reportingTime is string && data.reportingTime.size() >= 2 && data.reportingTime.size() <= 40
+        && data.startingTime is string && data.startingTime.size() >= 2 && data.startingTime.size() <= 40
+        && data.meetingPoint is string && data.meetingPoint.size() >= 3 && data.meetingPoint.size() <= 240
+        && data.boundaries is string && data.boundaries.size() >= 5 && data.boundaries.size() <= 1200
+        && data.entryFeeInr is number && data.entryFeeInr >= 0 && data.entryFeeInr <= 50000
+        && (!('prizeDetails' in data) || (data.prizeDetails is string && data.prizeDetails.size() <= 600))
+        && data.capacity is number && data.capacity >= 1 && data.capacity <= 5000
+        && data.confirmedCount is number && data.confirmedCount >= 0 && data.confirmedCount <= 5000
+        && data.registrationOpen is bool
+        && (!('registrationOpensAt' in data) || (data.registrationOpensAt is string && data.registrationOpensAt.size() <= 40))
+        && (!('registrationClosesAt' in data) || (data.registrationClosesAt is string && data.registrationClosesAt.size() <= 40))
+        && data.isPublished is bool
+        && (!('safetyNotes' in data) || (data.safetyNotes is string && data.safetyNotes.size() <= 2000))
+        && (!('scramNotes' in data) || (data.scramNotes is string && data.scramNotes.size() <= 1000))
+        && (!('bannerUrl' in data) || (data.bannerUrl is string && data.bannerUrl.size() <= 500000))
+        && (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 160));
+    }
+
+    function isValidRegistrationFields(data) {
+      return data.keys().hasAll([
+          'registrationId', 'eventId', 'eventTitle', 'fullName', 'age', 'phone',
+          'emergencyContact', 'isMinor', 'guardianPermission', 'rulesAccepted',
+          'conditionsAccepted', 'status', 'paymentStatus', 'amountInr',
+          'checkedIn', 'phoneLockId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'registrationId', 'eventId', 'eventTitle', 'fullName', 'age', 'phone',
+          'email', 'emergencyContact', 'isMinor', 'guardianName', 'guardianPhone',
+          'guardianPermission', 'rulesAccepted', 'conditionsAccepted', 'status',
+          'paymentStatus', 'amountInr', 'paymentOrderId', 'paymentTransactionId',
+          'checkedIn', 'checkedInAt', 'checkedInBy', 'phoneLockId',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.registrationId)
+        && isValidId(data.eventId)
+        && data.eventTitle is string && data.eventTitle.size() >= 2 && data.eventTitle.size() <= 140
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100
+        && data.age is number && data.age >= 8 && data.age <= 99
+        && data.phone is string && data.phone.size() >= 10 && data.phone.size() <= 20
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+        && data.emergencyContact is string && data.emergencyContact.size() >= 10 && data.emergencyContact.size() <= 20
+        && data.isMinor is bool
+        && (!('guardianName' in data) || (data.guardianName is string && data.guardianName.size() <= 100))
+        && (!('guardianPhone' in data) || (data.guardianPhone is string && data.guardianPhone.size() <= 20))
+        && data.guardianPermission is bool
+        && data.rulesAccepted == true
+        && data.conditionsAccepted == true
+        && (data.isMinor == false || data.guardianPermission == true)
+        && data.status in ['PENDING PAYMENT', 'PAYMENT PROCESSING', 'PAYMENT FAILED', 'CONFIRMED', 'CANCELLED']
+        && data.paymentStatus in ['PENDING', 'PROCESSING', 'FAILED', 'VERIFIED', 'RECONCILED']
+        && data.amountInr is number && data.amountInr >= 0 && data.amountInr <= 50000
+        && (!('paymentOrderId' in data) || (data.paymentOrderId is string && data.paymentOrderId.size() <= 128))
+        && (!('paymentTransactionId' in data) || (data.paymentTransactionId is string && data.paymentTransactionId.size() <= 128))
+        && data.checkedIn is bool
+        && (!('checkedInAt' in data) || (data.checkedInAt is string && data.checkedInAt.size() <= 64))
+        && (!('checkedInBy' in data) || (data.checkedInBy is string && data.checkedInBy.size() <= 160))
+        && isValidId(data.phoneLockId);
+    }
+
+    function isValidRegistrationLock(data, lockId) {
+      return data.keys().hasAll(['lockId', 'eventId', 'registrationId', 'createdAt'])
+        && data.keys().hasOnly(['lockId', 'eventId', 'registrationId', 'createdAt'])
+        && isValidId(data.lockId)
+        && data.lockId == lockId
+        && isValidId(data.eventId)
+        && isValidId(data.registrationId)
+        && data.createdAt == request.time;
+    }
+
+    function isValidPaymentRecord(data, paymentId) {
+      return data.keys().hasAll([
+          'paymentId', 'orderId', 'registrationId', 'eventId', 'participantName',
+          'amountInr', 'currency', 'status', 'verifiedByWebhook', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentId', 'orderId', 'registrationId', 'eventId', 'participantName',
+          'amountInr', 'currency', 'status', 'method', 'gatewayPaymentId',
+          'verifiedByWebhook', 'reconciliationNote', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.paymentId)
+        && data.paymentId == paymentId
+        && data.orderId is string && data.orderId.size() >= 4 && data.orderId.size() <= 128
+        && isValidId(data.registrationId)
+        && isValidId(data.eventId)
+        && data.participantName is string && data.participantName.size() >= 2 && data.participantName.size() <= 100
+        && data.amountInr is number && data.amountInr >= 0 && data.amountInr <= 50000
+        && data.currency == 'INR'
+        && data.status in ['CREATED', 'PROCESSING', 'VERIFIED', 'FAILED', 'RECONCILED']
+        && (!('method' in data) || (data.method is string && data.method.size() <= 60))
+        && (!('gatewayPaymentId' in data) || (data.gatewayPaymentId is string && data.gatewayPaymentId.size() <= 128))
+        && data.verifiedByWebhook is bool
+        && (!('reconciliationNote' in data) || (data.reconciliationNote is string && data.reconciliationNote.size() <= 500));
+    }
+
+    function isValidMediaHighlight(data, highlightId) {
+      return data.keys().hasAll([
+          'id', 'title', 'eventLabel', 'category', 'mediaType',
+          'mediaUrl', 'permissionConfirmed', 'sortOrder', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'title', 'eventLabel', 'category', 'mediaType',
+          'mediaUrl', 'thumbnailUrl', 'caption', 'permissionConfirmed',
+          'sortOrder', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.id == highlightId
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 140
+        && data.eventLabel is string && data.eventLabel.size() >= 2 && data.eventLabel.size() <= 120
+        && data.category in ['Hiding', 'Searching', 'Funny Moments', 'Running', 'Group Photo', 'Highlight Video']
+        && data.mediaType in ['image', 'video_embed', 'video_link']
+        && data.mediaUrl is string && data.mediaUrl.size() >= 5 && data.mediaUrl.size() <= 500000
+        && (!('thumbnailUrl' in data) || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 500000))
+        && (!('caption' in data) || (data.caption is string && data.caption.size() <= 400))
+        && data.permissionConfirmed is bool
+        && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 10000;
+    }
+
+    function isValidAdminUser(data, emailKey) {
+      return data.keys().hasAll([
+          'email', 'displayName', 'role', 'active', 'assignedEventIds', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'email', 'displayName', 'role', 'active', 'assignedEventIds',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.email is string && data.email == emailKey && data.email.size() >= 5 && data.email.size() <= 160
+        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100
+        && data.role in ['PRIMARY_ADMIN', 'EVENT_HOST']
+        && data.active is bool
+        && data.assignedEventIds is list
+        && data.assignedEventIds.size() <= 50
+        && (data.assignedEventIds.size() == 0 || data.assignedEventIds[0] is string)
+        && (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 160));
+    }
+
+    function isValidSiteSetting(data, settingId) {
+      return data.keys().hasAll(['id', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'logoUrl', 'clubTagline', 'instagramUrl', 'contactEmail',
+          'contactPhone', 'locationText', 'googleFormEmbedUrl', 'googleSheetUrl',
+          'customRuleOverrides', 'updatedBy', 'updatedAt'
+        ])
+        && data.id == settingId
+        && data.id in ['branding', 'rules', 'integrations']
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 700000))
+        && (!('clubTagline' in data) || (data.clubTagline is string && data.clubTagline.size() <= 200))
+        && (!('instagramUrl' in data) || (data.instagramUrl is string && data.instagramUrl.size() <= 300))
+        && (!('contactEmail' in data) || (data.contactEmail is string && data.contactEmail.size() <= 160))
+        && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 40))
+        && (!('locationText' in data) || (data.locationText is string && data.locationText.size() <= 200))
+        && (!('googleFormEmbedUrl' in data) || (data.googleFormEmbedUrl is string && data.googleFormEmbedUrl.size() <= 600))
+        && (!('googleSheetUrl' in data) || (data.googleSheetUrl is string && data.googleSheetUrl.size() <= 600))
+        && (!('customRuleOverrides' in data) || (data.customRuleOverrides is list && data.customRuleOverrides.size() <= 25 && (data.customRuleOverrides.size() == 0 || data.customRuleOverrides[0] is string)))
+        && (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 160))
+        && data.updatedAt == request.time;
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.keys().hasAll([
+          'id', 'actorEmail', 'actorRole', 'action', 'targetType', 'targetId', 'details', 'timestamp'
+        ])
+        && data.keys().hasOnly([
+          'id', 'actorEmail', 'actorRole', 'action', 'targetType', 'targetId', 'details', 'timestamp'
+        ])
+        && isValidId(data.id)
+        && data.id == logId
+        && data.actorEmail is string && data.actorEmail == request.auth.token.email
+        && data.actorRole in ['PRIMARY_ADMIN', 'EVENT_HOST']
+        && data.action is string && data.action.size() >= 2 && data.action.size() <= 80
+        && data.targetType is string && data.targetType.size() >= 2 && data.targetType.size() <= 60
+        && data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128
+        && data.details is string && data.details.size() <= 1000
+        && data.timestamp == request.time;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    match /events/{eventId} {
+      allow get: if isValidId(eventId) && (existing().isPublished == true || isAdmin());
+      allow list: if resource.data.isPublished == true || isAdmin();
+      allow create: if isPrimaryAdmin()
+        && isValidId(eventId)
+        && isValidEvent(incoming())
+        && incoming().id == eventId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(eventId)
+        && canAccessEvent(eventId)
+        && isValidEvent(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isPrimaryAdmin() && isValidId(eventId);
+    }
+
+    match /registrations/{registrationId} {
+      // Strict PII Isolation: only authorized admins/assigned hosts can read registrations
+      allow get: if isValidId(registrationId) && isAdmin() && canAccessEvent(existing().eventId);
+      allow list: if isAdmin() && (isPrimaryAdmin() || resource.data.eventId in adminDoc().assignedEventIds);
+
+      // Public participant registration: strictly locked to PENDING PAYMENT + unchecked-in + atomic lock
+      allow create: if isValidId(registrationId)
+        && isValidRegistrationFields(incoming())
+        && incoming().registrationId == registrationId
+        && incoming().status == 'PENDING PAYMENT'
+        && incoming().paymentStatus == 'PENDING'
+        && incoming().checkedIn == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/events/$(incoming().eventId))
+        && get(/databases/$(database)/documents/events/$(incoming().eventId)).data.isPublished == true
+        && get(/databases/$(database)/documents/events/$(incoming().eventId)).data.registrationOpen == true
+        && get(/databases/$(database)/documents/events/$(incoming().eventId)).data.confirmedCount < get(/databases/$(database)/documents/events/$(incoming().eventId)).data.capacity
+        && existsAfter(/databases/$(database)/documents/registrationLocks/$(incoming().phoneLockId));
+
+      // Only authorized admins/hosts can update status, payment verification, or check-in
+      allow update: if isAdmin()
+        && isValidId(registrationId)
+        && canAccessEvent(existing().eventId)
+        && isValidRegistrationFields(incoming())
+        && incoming().registrationId == existing().registrationId
+        && incoming().eventId == existing().eventId
+        && incoming().phoneLockId == existing().phoneLockId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isPrimaryAdmin()
+          || (
+            incoming().diff(existing()).affectedKeys().hasOnly(['checkedIn', 'checkedInAt', 'checkedInBy', 'updatedAt'])
+            && existing().status == 'CONFIRMED'
+            && existing().checkedIn == false
+            && incoming().checkedIn == true
+          )
+        );
+
+      allow delete: if isPrimaryAdmin() && isValidId(registrationId);
+    }
+
+    match /registrationLocks/{lockId} {
+      // Hash-keyed lock: single doc lookup only (never listable)
+      allow get: if isValidId(lockId);
+      allow list: if false;
+      allow create: if isValidId(lockId)
+        && isValidRegistrationLock(incoming(), lockId)
+        && !exists(/databases/$(database)/documents/registrationLocks/$(lockId))
+        && existsAfter(/databases/$(database)/documents/registrations/$(incoming().registrationId));
+      allow update: if false;
+      allow delete: if isPrimaryAdmin() && isValidId(lockId);
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isAdmin() && canAccessEvent(existing().eventId);
+      allow list: if isAdmin() && (isPrimaryAdmin() || resource.data.eventId in adminDoc().assignedEventIds);
+      allow create: if isAdmin()
+        && isValidId(paymentId)
+        && canAccessEvent(incoming().eventId)
+        && isValidPaymentRecord(incoming(), paymentId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/registrations/$(incoming().registrationId));
+      allow update: if isPrimaryAdmin()
+        && isValidId(paymentId)
+        && isValidPaymentRecord(incoming(), paymentId)
+        && incoming().paymentId == existing().paymentId
+        && incoming().registrationId == existing().registrationId
+        && incoming().eventId == existing().eventId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /mediaHighlights/{highlightId} {
+      allow get: if isValidId(highlightId) && (existing().permissionConfirmed == true || isAdmin());
+      allow list: if resource.data.permissionConfirmed == true || isAdmin();
+      allow create: if isAdmin()
+        && isValidId(highlightId)
+        && isValidMediaHighlight(incoming(), highlightId)
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(highlightId)
+        && isValidMediaHighlight(incoming(), highlightId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(highlightId);
+    }
+
+    match /admins/{adminEmail} {
+      allow get: if isValidEmailKey(adminEmail) && (isPrimaryAdmin() || (isVerifiedUser() && adminEmail == request.auth.token.email));
+      allow list: if isPrimaryAdmin();
+      allow create: if isPrimaryAdmin()
+        && isValidEmailKey(adminEmail)
+        && isValidAdminUser(incoming(), adminEmail)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isPrimaryAdmin()
+        && isValidEmailKey(adminEmail)
+        && isValidAdminUser(incoming(), adminEmail)
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isPrimaryAdmin()
+        && isValidEmailKey(adminEmail)
+        && adminEmail != 'somirgogoi8@gmail.com';
+    }
+
+    match /siteSettings/{settingId} {
+      allow get: if settingId in ['branding', 'rules'] || isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isPrimaryAdmin() && isValidSiteSetting(incoming(), settingId);
+      allow delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isPrimaryAdmin();
+      allow list: if isPrimaryAdmin();
+      allow create: if isAdmin() && isValidId(logId) && isValidAuditLog(incoming(), logId);
+      allow update, delete: if false;
+    }
+  }
+}

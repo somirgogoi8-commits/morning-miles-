@@ -1,0 +1,258 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Event",
+      "description": "A Morning Miles Club Manhunt event with schedule, boundaries, fees, capacity, and SCRAM session instructions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 3, "maxLength": 140 },
+        "subtitle": { "type": "string", "maxLength": 240 },
+        "dateISO": { "type": "string", "minLength": 10, "maxLength": 40 },
+        "reportingTime": { "type": "string", "minLength": 2, "maxLength": 40 },
+        "startingTime": { "type": "string", "minLength": 2, "maxLength": 40 },
+        "meetingPoint": { "type": "string", "minLength": 3, "maxLength": 240 },
+        "boundaries": { "type": "string", "minLength": 5, "maxLength": 1200 },
+        "entryFeeInr": { "type": "number" },
+        "prizeDetails": { "type": "string", "maxLength": 600 },
+        "capacity": { "type": "number" },
+        "confirmedCount": { "type": "number" },
+        "registrationOpen": { "type": "boolean" },
+        "registrationOpensAt": { "type": "string", "maxLength": 40 },
+        "registrationClosesAt": { "type": "string", "maxLength": 40 },
+        "isPublished": { "type": "boolean" },
+        "safetyNotes": { "type": "string", "maxLength": 2000 },
+        "scramNotes": { "type": "string", "maxLength": 1000 },
+        "bannerUrl": { "type": "string", "maxLength": 500000 },
+        "createdBy": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "title",
+        "dateISO",
+        "reportingTime",
+        "startingTime",
+        "meetingPoint",
+        "boundaries",
+        "entryFeeInr",
+        "capacity",
+        "confirmedCount",
+        "registrationOpen",
+        "isPublished",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "Participant registration record containing private PII, rulebook acceptance, payment state, and event-day check-in status.",
+      "type": "object",
+      "properties": {
+        "registrationId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventTitle": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "age": { "type": "number" },
+        "phone": { "type": "string", "minLength": 10, "maxLength": 20, "pattern": "^[+0-9\\s\\-]{10,20}$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "emergencyContact": { "type": "string", "minLength": 10, "maxLength": 20, "pattern": "^[+0-9\\s\\-]{10,20}$" },
+        "isMinor": { "type": "boolean" },
+        "guardianName": { "type": "string", "maxLength": 100 },
+        "guardianPhone": { "type": "string", "maxLength": 20 },
+        "guardianPermission": { "type": "boolean" },
+        "rulesAccepted": { "type": "boolean" },
+        "conditionsAccepted": { "type": "boolean" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING PAYMENT", "PAYMENT PROCESSING", "PAYMENT FAILED", "CONFIRMED", "CANCELLED"]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "FAILED", "VERIFIED", "RECONCILED"]
+        },
+        "amountInr": { "type": "number" },
+        "paymentOrderId": { "type": "string", "maxLength": 128 },
+        "paymentTransactionId": { "type": "string", "maxLength": 128 },
+        "checkedIn": { "type": "boolean" },
+        "checkedInAt": { "type": "string", "maxLength": 64 },
+        "checkedInBy": { "type": "string", "maxLength": 160 },
+        "phoneLockId": { "type": "string", "minLength": 10, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "registrationId",
+        "eventId",
+        "eventTitle",
+        "fullName",
+        "age",
+        "phone",
+        "emergencyContact",
+        "isMinor",
+        "guardianPermission",
+        "rulesAccepted",
+        "conditionsAccepted",
+        "status",
+        "paymentStatus",
+        "amountInr",
+        "checkedIn",
+        "phoneLockId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RegistrationLock": {
+      "title": "RegistrationLock",
+      "description": "Opaque hash-keyed lock preventing duplicate registrations for the same event without exposing participant PII.",
+      "type": "object",
+      "properties": {
+        "lockId": { "type": "string", "minLength": 10, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "registrationId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lockId", "eventId", "registrationId", "createdAt"]
+    },
+    "PaymentRecord": {
+      "title": "PaymentRecord",
+      "description": "Verified payment transaction record linked to a registration ID and gateway order.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string", "minLength": 4, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderId": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "registrationId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "participantName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "amountInr": { "type": "number" },
+        "currency": { "type": "string", "enum": ["INR"] },
+        "status": { "type": "string", "enum": ["CREATED", "PROCESSING", "VERIFIED", "FAILED", "RECONCILED"] },
+        "method": { "type": "string", "maxLength": 60 },
+        "gatewayPaymentId": { "type": "string", "maxLength": 128 },
+        "verifiedByWebhook": { "type": "boolean" },
+        "reconciliationNote": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "paymentId",
+        "orderId",
+        "registrationId",
+        "eventId",
+        "participantName",
+        "amountInr",
+        "currency",
+        "status",
+        "verifiedByWebhook",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MediaHighlight": {
+      "title": "MediaHighlight",
+      "description": "Previous Manhunt photographs and video highlights published with participant permission.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "eventLabel": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["Hiding", "Searching", "Funny Moments", "Running", "Group Photo", "Highlight Video"] },
+        "mediaType": { "type": "string", "enum": ["image", "video_embed", "video_link"] },
+        "mediaUrl": { "type": "string", "minLength": 5, "maxLength": 500000 },
+        "thumbnailUrl": { "type": "string", "maxLength": 500000 },
+        "caption": { "type": "string", "maxLength": 400 },
+        "permissionConfirmed": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "eventLabel", "category", "mediaType", "mediaUrl", "permissionConfirmed", "sortOrder", "createdAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorised Morning Miles Club administrator or event host account metadata.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "minLength": 5, "maxLength": 160 },
+        "displayName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "role": { "type": "string", "enum": ["PRIMARY_ADMIN", "EVENT_HOST"] },
+        "active": { "type": "boolean" },
+        "assignedEventIds": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "displayName", "role", "active", "assignedEventIds", "createdAt", "updatedAt"]
+    },
+    "SiteSetting": {
+      "title": "SiteSetting",
+      "description": "Club branding (official logo), rulebook configuration, and optional Google Forms/Sheets integration URLs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "enum": ["branding", "rules", "integrations"] },
+        "logoUrl": { "type": "string", "maxLength": 700000 },
+        "clubTagline": { "type": "string", "maxLength": 200 },
+        "instagramUrl": { "type": "string", "maxLength": 300 },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "contactPhone": { "type": "string", "maxLength": 40 },
+        "locationText": { "type": "string", "maxLength": 200 },
+        "googleFormEmbedUrl": { "type": "string", "maxLength": 600 },
+        "googleSheetUrl": { "type": "string", "maxLength": 600 },
+        "customRuleOverrides": { "type": "array" },
+        "updatedBy": { "type": "string", "maxLength": 160 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable security and administrative action audit log.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 4, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorEmail": { "type": "string", "minLength": 5, "maxLength": 160 },
+        "actorRole": { "type": "string", "enum": ["PRIMARY_ADMIN", "EVENT_HOST"] },
+        "action": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "targetType": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorEmail", "actorRole", "action", "targetType", "targetId", "details", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Published and draft Manhunt events."
+    },
+    "/registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/Registration" },
+      "description": "Private participant registrations with PII and payment/check-in state."
+    },
+    "/registrationLocks/{lockId}": {
+      "schema": { "$ref": "#/entities/RegistrationLock" },
+      "description": "Opaque hash locks preventing duplicate event registrations."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Verified payment transaction records."
+    },
+    "/mediaHighlights/{highlightId}": {
+      "schema": { "$ref": "#/entities/MediaHighlight" },
+      "description": "Previous Manhunt highlights with participant permission flag."
+    },
+    "/admins/{adminEmail}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Authorised Primary Admin and Event Host role assignments."
+    },
+    "/siteSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteSetting" },
+      "description": "Official logo branding, rulebook overrides, and optional Google Forms/Sheets config."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable audit trail accessible only to Primary Admins."
+    }
+  }
+}
